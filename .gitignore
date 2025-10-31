@@ -1,0 +1,103 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-wheel-metadata/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# VSCode
+.vscode/
+
+# JetBrains IDEs
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+
+# Jupyter
+.ipynb_checkpoints
+
+# Logs
+logs/
+*.log
+
+# Environment files / secrets
+.env
+.env.*
+secrets.yml
+
+# Local DB / sqlite files
+*.db
+*.sqlite3
+db.sqlite3
+db.sqlite3-journal
+
+# Token storage (temporary/local)
+src/utils/tokens.json
+**/tokens.json
+
+# Static site / docs build
+docs/_build/
+
+# Sphinx
+_build/
+
+# Node
+node_modules/
+
+# Misc
+*.pyc
+*.pyo
+*.pyd
+*.cache
+*.bak
+*.swp
