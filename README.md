@@ -5,100 +5,126 @@ Goal: Provide account linking, posting, scheduling and basic analytics from Disc
 
 ## Quick start
 1. Install deps:
-   ```
+   ```bash
    pip install -r requirements.txt
    ```
-2. Copy `.env.example` → `.env` and fill values (Discord token, API keys, DB URL).
-3. Run the bot:
+2. Copy `.env.example` → `.env` and fill values (Discord token, API keys, MongoDB URL).
+3. Start MongoDB:
+   ```bash
+   sudo systemctl start mongod
    ```
+4. Start FastAPI server (handles OAuth callbacks):
+   ```bash
+   uvicorn src.api.main:app --reload --port 8080
+   ```
+5. Run the bot:
+   ```bash
    python src/bot.py
    ```
 
 ## Project overview
 - Language: Python 3.11+
-- Libraries: discord.py, requests, aiohttp, APScheduler, python-dotenv, sqlalchemy/your DB driver, cryptography
-- Scheduler: APScheduler (schedules posts stored in DB)
-- DB: choose MongoDB or PostgreSQL (current code uses config.py — replace with real DB settings)
+- Core Libraries: 
+  - discord.py - Bot framework
+  - FastAPI - OAuth callback server
+  - motor - Async MongoDB driver
+  - APScheduler - Post scheduling
+  - python-dotenv - Environment management
+  - pydantic - Data validation
+  - cryptography - Token encryption
 
 ## Repo structure
-- src/
-  - bot.py                — Entry point, loads cogs
-  - config.py             — Environment and app constants
-  - cogs/
-    - facebook.py         — Facebook commands (connect, disconnect, post, recent, etc.)
-    - instagram.py        — Instagram commands
-    - linkedin.py         — LinkedIn commands
-    - tiktok.py           — TikTok commands
-  - services/
-    - facebook.py         — Low-level FB Graph API wrappers
-    - instagram.py
-    - linkedin.py
-    - tiktok.py
-  - utils/
-    - database.py         — DB helpers / models
-    - oauth.py            — OAuth helpers, token storage
-    - scheduler.py        — APScheduler setup and job runner
-  - tests/                — Unit tests
-- .env.example
-- requirements.txt
-- README.md
+```
+src/
+├── api/                   # FastAPI OAuth callback server
+│   ├── main.py           # API entry point
+│   ├── routes/           # Platform-specific OAuth routes
+│   └── models.py         # Pydantic models
+├── bot.py                # Discord bot entry point
+├── config.py             # Environment and app constants
+├── cogs/                 # Discord bot commands
+├── services/             # Platform API wrappers
+├── utils/
+│   ├── database.py       # MongoDB helpers
+│   ├── oauth.py          # OAuth helpers
+│   └── scheduler.py      # APScheduler setup
+└── tests/                # Unit tests
+```
+
+## MongoDB Collections
+- `guilds` - Discord server settings
+- `platform_accounts` - OAuth tokens and account info
+- `scheduled_posts` - Pending scheduled posts
+- `post_analytics` - Historical post performance
 
 ## Important files to edit
-- src/config.py — add CLIENT IDs/SECRETS and DISCORD_TOKEN
-- src/utils/oauth.py — implement real token storage (DB + encryption)
-- src/utils/database.py — swap file token storage for DB
-- src/cogs/* — implement platform-specific command flows
+- src/api/main.py - FastAPI OAuth callback handlers
+- src/utils/database.py - MongoDB operations
+- src/cogs/* - Platform-specific commands
 
 ## Commands (examples)
-- Account management
-  - `!connect_facebook` — send OAuth URL (DM)
-  - `!disconnect_facebook`
-  - `!accounts` — list connected accounts
-- Posting
-  - `!post_facebook <message>`
-  - `!post_instagram <caption>` (image upload flows require multipart)
-  - `!schedule <platform> <ISO-datetime> <content>`
-  - `!crosspost <content>`
-- Monitoring
-  - `!recent <platform>`
-  - `!stats <platform>`
-
-(Actual prefixes/command names live in `src/cogs/*`.)
+[Previous commands section remains the same]
 
 ## Developer workflow
 - Branch per feature (e.g., feature/facebook-oauth)
-- Run bot locally, test OAuth flows using local redirect URIs or ngrok
+- Run both FastAPI server and Discord bot locally
+- Test OAuth flows using ngrok for public callbacks
 - Add unit tests under `src/tests/`
-- Use env vars for secrets, never commit them
+- Use `.env` for secrets
 
-## OAuth & callback
-- Provide a small web server (Flask or aiohttp) to handle provider callbacks:
-  - Exchange `code` for tokens
-  - Persist tokens with expiry and refresh_token
-  - Save mapping: discord_guild_id ↔ platform_account (store page_id if applicable)
+## OAuth & callback (FastAPI)
+- FastAPI endpoints handle provider callbacks:
+  - GET `/oauth/{platform}/callback` - Handle initial OAuth code
+  - POST `/oauth/{platform}/refresh` - Refresh expired tokens
+- Tokens stored in MongoDB with:
+  - AES encryption at rest
+  - Automatic refresh handling
+  - Guild ID ↔ platform account mapping
 
 ## Scheduler
-- APScheduler checks DB every minute for ready posts
-- Jobs must handle retries and rate-limit backoff
+- APScheduler + MongoDB for reliable scheduling
+- Atomic updates prevent double-posting
+- Retries with exponential backoff
 
 ## Security & best practices
-- Encrypt tokens at rest (cryptography)
-- Keep secrets in `.env` or secret manager
-- Rate-limit bot commands (discord.py cooldowns)
-- Log errors to file, not to console with secrets
+- Encrypt tokens using Fernet (cryptography)
+- MongoDB authentication required
+- Rate-limit bot commands using discord.py
+- Structured logging with rotation
 
 ## Testing & CI
-- Unit-test API wrappers with mocked HTTP (responses / pytest-mock)
-- Integration tests use staging tokens and test accounts
+- Unit tests with pytest and motor-asyncio
+- Mock MongoDB operations for testing
+- Integration tests use staging credentials
+
+## Environment Variables
+```bash
+# Discord
+DISCORD_TOKEN=your_token
+
+# MongoDB
+MONGODB_URL=mongodb://localhost:27017
+DB_NAME=discord_social
+
+# OAuth
+FACEBOOK_CLIENT_ID=xxx
+FACEBOOK_CLIENT_SECRET=xxx
+# [Other platform credentials]
+
+# FastAPI
+API_HOST=localhost
+API_PORT=8080
+```
 
 ## Notes for team
-- Person 1 (Facebook): implement OAuth callback server, token storage, and post endpoints first.
-- Use `src/config.py` as development defaults, but prefer `.env` and secret management in production.
-- Document API quotas used by each command to avoid hitting provider limits.
+- Person 1 (Facebook): Implement FastAPI OAuth routes and MongoDB storage first
+- Use motor for async MongoDB operations
+- Document API rate limits in comments
 
 ## Contributing
 - Open an issue for major changes
-- Submit PRs to `main` with clear description and tests
+- Submit PRs to `main` with tests
+- Follow Black code formatting
 
 ## Contacts
-- Project lead / task owners: update this file with your Discord handles and responsibilities.
+[Previous contacts section remains the same]
