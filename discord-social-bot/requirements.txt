@@ -1,0 +1,7 @@
+discord.py
+requests
+python-dotenv
+apscheduler
+sqlalchemy
+cryptography
+aiohttp
