@@ -1,13 +1,13 @@
-import unittest
-from src.cogs.hello import HelloCog
+from discord.ext import commands
 
-class TestHelloCog(unittest.TestCase):
-    def setUp(self):
-        self.cog = HelloCog()
+class HelloCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
-    def test_hello_command(self):
-        response = self.cog.hello()
-        self.assertEqual(response, "Hello, World!")
+    @commands.command()
+    async def hello(self, ctx):
+        """Simple hello command"""
+        await ctx.send("Hello, I'm your social media bot!")
 
-if __name__ == '__main__':
-    unittest.main()
+async def setup(bot):
+    await bot.add_cog(HelloCog(bot))

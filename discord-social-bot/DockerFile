@@ -1,0 +1,22 @@
+# Use official Python image
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements file
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install MongoDB client tools (optional, for admin / mongo shell)
+RUN apt-get update && \
+    apt-get install -y mongodb-clients && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy your bot code
+COPY . .
+
+# Default command to run bot
+CMD ["python", "-m", "src.bot"]

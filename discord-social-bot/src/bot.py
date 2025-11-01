@@ -1,15 +1,22 @@
+import os
+from dotenv import load_dotenv
 from discord.ext import commands
 
-bot = commands.Bot(command_prefix='!')
+# Load environment variables
+load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+bot = commands.Bot(command_prefix="!")
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}')
+    print(f"✅ Logged in as {bot.user}")
 
-# Load cogs
-bot.load_extension('cogs.hello')
+async def setup_hook():
+    # Load your HelloCog
+    await bot.load_extension("src.cogs.hello")
 
-# Run the bot with the token from the config
-if __name__ == '__main__':
-    import config
-    bot.run(config.DISCORD_TOKEN)
+bot.setup_hook = setup_hook
+
+# Run the bot
+bot.run(TOKEN)
