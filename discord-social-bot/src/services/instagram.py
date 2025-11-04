@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 from urllib.parse import urljoin
 import time
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("instagram_service")
 logging.basicConfig(level=logging.INFO)
 
 class InstagramBusinessAPI:
@@ -37,11 +37,9 @@ class InstagramBusinessAPI:
 
     # --- POSTING ---
     def post_image(self, image_url: str, caption: str) -> Dict[str, Any]:
-        """Upload and publish an image on Instagram Business."""
         if not self.ig_user_id:
             return {"success": False, "error": "Missing Instagram user ID."}
 
-        # Step 1: Create media container
         create_endpoint = f"{self.ig_user_id}/media"
         create_data = {"image_url": image_url, "caption": caption}
         container = self._make_request("POST", create_endpoint, data=create_data)
@@ -49,13 +47,11 @@ class InstagramBusinessAPI:
         if not container.get("success"):
             return container
 
-        # Step 2: Publish the media
         publish_endpoint = f"{self.ig_user_id}/media_publish"
         publish_data = {"creation_id": container["data"]["id"]}
         return self._make_request("POST", publish_endpoint, data=publish_data)
 
     def post_text(self, caption: str) -> Dict[str, Any]:
-        """Simulate text post by using placeholder image."""
         placeholder = "https://via.placeholder.com/1080x1080.png?text=" + requests.utils.quote(caption)
         return self.post_image(placeholder, caption)
 
@@ -65,20 +61,18 @@ class InstagramBusinessAPI:
             return {"success": False, "error": "Missing Instagram user ID."}
 
         endpoint = f"{self.ig_user_id}/media"
-        params = {"fields": "id,caption,media_url,timestamp,like_count,comments_count", "limit": limit}
+        params = {"fields": "id,caption,media_url,permalink,timestamp", "limit": limit}
         return self._make_request("GET", endpoint, params=params)
 
     # --- ANALYTICS ---
     def get_insights(self, media_id: str) -> Dict[str, Any]:
-        """Get insights for a specific post."""
         endpoint = f"{media_id}/insights"
         params = {"metric": "impressions,reach,engagement"}
         return self._make_request("GET", endpoint, params=params)
 
     def get_account_stats(self) -> Dict[str, Any]:
-        """Get overall profile stats (followers, media count, username)."""
         if not self.ig_user_id:
             return {"success": False, "error": "Missing Instagram user ID."}
         endpoint = f"{self.ig_user_id}"
-        params = {"fields": "username,followers_count,media_count"}
+        params = {"fields": "username,followers_count,follows_count,media_count"}
         return self._make_request("GET", endpoint, params=params)
