@@ -1,232 +1,84 @@
-import os
 import requests
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
-from utils.database.mongodb_handler import db_handler
-from utils.encryption import encryption_handler
+import logging
+from typing import Optional, Dict, Any
+from urllib.parse import urljoin
+import time
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-GRAPH_API_VERSION = "v24.0"
-BASE_URL = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
+class InstagramBusinessAPI:
+    BASE_URL = "https://graph.facebook.com/v24.0/"
 
+    def __init__(self, access_token: str, ig_user_id: Optional[str] = None, max_retries: int = 1):
+        self.access_token = access_token
+        self.ig_user_id = ig_user_id
+        self.max_retries = max_retries
 
-async def get_valid_token(account_id: str) -> str:
-    """
-    Récupère un token valide pour le compte Instagram.
-    Rafraîchit automatiquement le token s’il est proche de l’expiration.
-    """
-    try:
-        account = await db_handler.db.social_accounts.find_one({"_id": account_id})
-        if not account or "tokens" not in account:
-            raise ValueError("Aucun token trouvé pour ce compte Instagram.")
-
-        encrypted_token = account["tokens"]["access_token"]
-        access_token = encryption_handler.decrypt_token(encrypted_token)
-        expires_at = account["tokens"].get("expires_at")
-
-        if expires_at:
-            expires_at = datetime.fromisoformat(expires_at)
-            if expires_at <= datetime.utcnow() + timedelta(days=7):
-                refreshed = await refresh_long_lived_token(access_token, account_id)
-                if refreshed:
-                    access_token = refreshed
-
-        return access_token
-
-    except Exception as e:
-        print(f"[❌] Erreur get_valid_token : {e}")
-        raise
-
-
-async def refresh_long_lived_token(old_token: str, account_id: str):
-    """
-    Rafraîchit un token long-lived Instagram.
-    """
-    try:
-        params = {
-            "grant_type": "fb_exchange_token",
-            "client_id": os.getenv("INSTAGRAM_APP_ID"),
-            "client_secret": os.getenv("INSTAGRAM_APP_SECRET"),
-            "fb_exchange_token": old_token
-        }
-
-        response = requests.get(f"{BASE_URL}/oauth/access_token", params=params)
-        data = response.json()
-
-        if "access_token" in data:
-            new_token = data["access_token"]
-            new_expiration = datetime.utcnow() + timedelta(days=60)
-
-            # Sauvegarde du nouveau token chiffré
-            await db_handler.db.social_accounts.update_one(
-                {"_id": account_id},
-                {"$set": {
-                    "tokens.access_token": encryption_handler.encrypt_token(new_token),
-                    "tokens.expires_at": new_expiration.isoformat()
-                }}
-            )
-            print("[🔁] Token Instagram rafraîchi avec succès.")
-            return new_token
+    def _make_request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
+        url = urljoin(self.BASE_URL, endpoint)
+        if 'params' in kwargs:
+            kwargs['params']['access_token'] = self.access_token
         else:
-            print(f"[⚠️] Échec de refresh token : {data}")
-            return None
+            kwargs['params'] = {'access_token': self.access_token}
 
-    except Exception as e:
-        print(f"[❌] Erreur refresh_long_lived_token : {e}")
-        return None
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = requests.request(method, url, **kwargs)
+                response.raise_for_status()
+                return {"success": True, "data": response.json()}
+            except requests.exceptions.RequestException as e:
+                logger.error(f"[Attempt {attempt+1}] Instagram API error: {e}")
+                if attempt < self.max_retries:
+                    time.sleep(1)
+                else:
+                    content = response.content if 'response' in locals() else None
+                    return {"success": False, "error": str(e), "response": content}
 
+    # --- POSTING ---
+    def post_image(self, image_url: str, caption: str) -> Dict[str, Any]:
+        """Upload and publish an image on Instagram Business."""
+        if not self.ig_user_id:
+            return {"success": False, "error": "Missing Instagram user ID."}
 
-# ------------------------------------------------------
-# ✅ POSTER DU CONTENU SUR INSTAGRAM
-# ------------------------------------------------------
+        # Step 1: Create media container
+        create_endpoint = f"{self.ig_user_id}/media"
+        create_data = {"image_url": image_url, "caption": caption}
+        container = self._make_request("POST", create_endpoint, data=create_data)
 
-async def create_media_container(ig_user_id: str, image_url: str, caption: str, access_token: str):
-    """
-    Étape 1 : Crée un conteneur média (photo ou vidéo).
-    """
-    url = f"{BASE_URL}/{ig_user_id}/media"
-    params = {
-        "image_url": image_url,
-        "caption": caption,
-        "access_token": access_token
-    }
+        if not container.get("success"):
+            return container
 
-    response = requests.post(url, data=params)
-    data = response.json()
+        # Step 2: Publish the media
+        publish_endpoint = f"{self.ig_user_id}/media_publish"
+        publish_data = {"creation_id": container["data"]["id"]}
+        return self._make_request("POST", publish_endpoint, data=publish_data)
 
-    if "id" in data:
-        print(f"[📸] Conteneur créé : {data['id']}")
-        return data["id"]
-    else:
-        print(f"[⚠️] Erreur création conteneur : {data}")
-        return None
+    def post_text(self, caption: str) -> Dict[str, Any]:
+        """Simulate text post by using placeholder image."""
+        placeholder = "https://via.placeholder.com/1080x1080.png?text=" + requests.utils.quote(caption)
+        return self.post_image(placeholder, caption)
 
+    # --- GET POSTS ---
+    def get_recent_posts(self, limit: int = 5) -> Dict[str, Any]:
+        if not self.ig_user_id:
+            return {"success": False, "error": "Missing Instagram user ID."}
 
-async def publish_media(ig_user_id: str, creation_id: str, access_token: str):
-    """
-    Étape 2 : Publie un média déjà uploadé.
-    """
-    url = f"{BASE_URL}/{ig_user_id}/media_publish"
-    params = {
-        "creation_id": creation_id,
-        "access_token": access_token
-    }
+        endpoint = f"{self.ig_user_id}/media"
+        params = {"fields": "id,caption,media_url,timestamp,like_count,comments_count", "limit": limit}
+        return self._make_request("GET", endpoint, params=params)
 
-    response = requests.post(url, data=params)
-    data = response.json()
+    # --- ANALYTICS ---
+    def get_insights(self, media_id: str) -> Dict[str, Any]:
+        """Get insights for a specific post."""
+        endpoint = f"{media_id}/insights"
+        params = {"metric": "impressions,reach,engagement"}
+        return self._make_request("GET", endpoint, params=params)
 
-    if "id" in data:
-        print(f"[✅] Publication réussie : {data['id']}")
-        return data["id"]
-    else:
-        print(f"[⚠️] Erreur publication : {data}")
-        return None
-
-
-async def post_photo_instagram(account_id: str, image_url: str, caption: str):
-    """
-    Fonction complète pour publier une image sur Instagram.
-    """
-    try:
-        access_token = await get_valid_token(account_id)
-
-        # Récupère le user_id Instagram (lié à la page)
-        account = await db_handler.db.social_accounts.find_one({"_id": account_id})
-        ig_user_id = account.get("social_id")
-
-        if not ig_user_id:
-            raise ValueError("Aucun identifiant utilisateur Instagram trouvé.")
-
-        creation_id = await create_media_container(ig_user_id, image_url, caption, access_token)
-        if not creation_id:
-            raise Exception("Impossible de créer le conteneur média.")
-
-        post_id = await publish_media(ig_user_id, creation_id, access_token)
-        return post_id
-
-    except Exception as e:
-        print(f"[❌] Erreur post_photo_instagram : {e}")
-        return None
-
-
-# ------------------------------------------------------
-# 📊 RÉCUPÉRATION DE POSTS & ANALYTICS
-# ------------------------------------------------------
-
-async def get_recent_posts(account_id: str, limit: int = 5):
-    """
-    Récupère les derniers posts d’un compte Instagram.
-    """
-    try:
-        access_token = await get_valid_token(account_id)
-        account = await db_handler.db.social_accounts.find_one({"_id": account_id})
-        ig_user_id = account.get("social_id")
-
-        url = f"{BASE_URL}/{ig_user_id}/media"
-        params = {
-            "fields": "id,caption,media_url,media_type,like_count,comments_count,timestamp",
-            "access_token": access_token,
-            "limit": limit
-        }
-
-        response = requests.get(url, params=params)
-        data = response.json()
-        posts = data.get("data", [])
-
-        print(f"[📊] {len(posts)} posts récupérés.")
-        return posts
-
-    except Exception as e:
-        print(f"[❌] Erreur get_recent_posts : {e}")
-        return []
-
-
-async def get_post_insights(media_id: str, account_id: str):
-    """
-    Récupère les statistiques (likes, commentaires, portée, etc.) pour un post.
-    """
-    try:
-        access_token = await get_valid_token(account_id)
-
-        metrics = "impressions,reach,engagement,likes,comments,saves"
-        url = f"{BASE_URL}/{media_id}/insights"
-        params = {
-            "metric": metrics,
-            "access_token": access_token
-        }
-
-        response = requests.get(url, params=params)
-        data = response.json()
-
-        return data.get("data", [])
-
-    except Exception as e:
-        print(f"[❌] Erreur get_post_insights : {e}")
-        return []
-
-
-async def get_account_insights(account_id: str):
-    """
-    Récupère les statistiques globales du compte (followers, portée, etc.).
-    """
-    try:
-        access_token = await get_valid_token(account_id)
-        account = await db_handler.db.social_accounts.find_one({"_id": account_id})
-        ig_user_id = account.get("social_id")
-
-        url = f"{BASE_URL}/{ig_user_id}/insights"
-        params = {
-            "metric": "impressions,reach,profile_views,follower_count",
-            "period": "day",
-            "access_token": access_token
-        }
-
-        response = requests.get(url, params=params)
-        data = response.json()
-        return data.get("data", [])
-
-    except Exception as e:
-        print(f"[❌] Erreur get_account_insights : {e}")
-        return []
-
+    def get_account_stats(self) -> Dict[str, Any]:
+        """Get overall profile stats (followers, media count, username)."""
+        if not self.ig_user_id:
+            return {"success": False, "error": "Missing Instagram user ID."}
+        endpoint = f"{self.ig_user_id}"
+        params = {"fields": "username,followers_count,media_count"}
+        return self._make_request("GET", endpoint, params=params)
