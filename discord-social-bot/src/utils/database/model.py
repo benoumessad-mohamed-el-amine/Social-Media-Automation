@@ -1,3 +1,46 @@
+"""
+PyObjectId
+- Classe personnalisée pour gérer les ObjectId de MongoDB avec Pydantic.
+- Assure une sérialisation JSON correcte des ObjectId.
+
+- Enumération des plateformes sociales supportées : LINKEDIN, TIKTOK, FACEBOOK, INSTAGRAM.
+
+- Enumération des statuts possibles pour un post : SCHEDULED, PUBLISHED, FAILED, CANCELLED.(pour scheduler)
+
+PlatformTokens
+- Modèle pour stocker les tokens d'accès aux API des plateformes.
+- Contient access_token, refresh_token, date d'expiration et scope.
+- Les tokens sont encryptés avec la fonction que j'ai créer dans src/utils/database/encryption
+
+SocialMediaAccount
+- Représente un compte connecté sur une plateforme sociale.
+- Contient l'id MongoDB, le nom du compte, la plateforme, les tokens,
+  la date de connexion et le dernier rafraîchissement.
+- Champ is_active pour indiquer si le compte est actif.
+
+User
+- Représente un utilisateur Discord.
+- Contient l'id MongoDB, l'id et le nom Discord, le rôle (member/admin),
+  la date de création et de dernière mise à jour. 
+
+ScheduledPost
+- Modèle pour un post programmé sur une plateforme sociale.
+- Contient l'id MongoDB, le compte social associé, l'utilisateur qui a demandé,
+  la plateforme, le contenu, les médias, la date de publication prévue et le statut.
+- Suivi des erreurs et des tentatives de publication.
+
+CommandLog
+- Enregistre les commandes exécutées par les utilisateurs Discord.
+- Contient les arguments de la commande, le succès ou l'échec, et un message d'erreur si besoin.
+- Permet de garder un historique pour débogage ou statistiques.
+
+ActivityLog
+- Suit les actions importantes des utilisateurs et du bot.
+- Contient l'id MongoDB, l'utilisateur, l'action effectuée, le compte social concerné,
+  la plateforme et des détails optionnels.
+- Permet de créer un historique des événements pour audit ou analyse.
+"""
+
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum

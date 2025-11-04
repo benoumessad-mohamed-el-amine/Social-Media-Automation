@@ -1,3 +1,71 @@
+"""
+MongoDB Handler pour le bot Discord Social Media
+
+Ce fichier contient la classe `MongoDBHandler` qui gère toutes les interactions avec
+la base de données MongoDB de manière asynchrone, en utilisant `motor`.
+
+ MongoDBHandler
+- Classe principale pour la connexion, manipulation et récupération des données MongoDB.
+- Utilise `AsyncIOMotorClient` pour les opérations asynchrones.
+
+ Méthodes principales
+
+1. connect()
+- Établit la connexion à MongoDB en utilisant l'URL et la base définies dans les variables d'environnement.
+- Crée les indexes nécessaires sur les collections pour optimiser les requêtes.
+- Affiche un message de connexion réussie.
+
+2. close()
+- Ferme proprement la connexion à MongoDB.
+
+3. _create_indexes()
+- Crée les indexes pour chaque collection importante (users, social_accounts, scheduled_posts, activity_logs)
+  pour assurer l'unicité et accélérer les recherches.
+
+
+ Gestion des users
+- get_or_create_user(discord_id, discord_username)
+  - Récupère un utilisateur existant ou le crée si absent.
+  - Retourne un objet `User` validé par Pydantic.
+
+
+Gestion des comptes sociaux
+- add_social_account(platform, account_name, access_token, ...)
+  - Ajoute un compte social avec tokens encryptés.
+  - Retourne l'ID MongoDB du compte créé.
+
+- get_social_account(account_id)
+  - Récupère un compte social par son ID.
+  - Retourne un objet `SocialMediaAccount` ou None si absent.
+
+- get_all_social_accounts()
+  - Récupère tous les comptes actifs.
+
+- get_tokens(account_id)
+  - Retourne les tokens d'accès et de refresh décryptés pour un compte donné.
+
+Gestion des posts programmés
+- create_scheduled_post(post)
+  - Insère un post programmé dans la collection `scheduled_posts`.
+
+- get_pending_posts(before_time)
+  - Récupère tous les posts programmés dont l'heure est passée et qui n'ont pas dépassé
+    le nombre maximal de tentatives.
+
+- update_post_status(post_id, status, error_message)
+  - Met à jour le statut d'un post et enregistre la date de publication si nécessaire.
+  - Incrémente le nombre de tentatives pour suivre les échecs.
+
+Logging
+- log_command(discord_id, command_name, ...)
+  - Enregistre les commandes exécutées par les utilisateurs Discord.
+  - Contient arguments, succès/échec et message d'erreur si besoin.
+
+- log_activity(discord_id, action, ...)
+  - Enregistre les actions importantes du bot ou des utilisateurs.
+  - Permet de suivre les événements comme la publication de posts, connexion de comptes, etc.
+
+"""
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -111,6 +179,7 @@ class MongoDBHandler:
         return str(result.inserted_id)
 
     async def get_pending_posts(self, before_time: datetime) -> List[ScheduledPost]:
+
         query = {
             "status": PostStatus.SCHEDULED.value,
             "scheduled_time": {"$lte": before_time},
