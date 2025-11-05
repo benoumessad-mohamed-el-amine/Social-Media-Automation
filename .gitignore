@@ -101,3 +101,25 @@ node_modules/
 *.cache
 *.bak
 *.swp
+*.log
+
+# Ignore pipenv / poetry virtual environments
+.pipenv/
+.poetry/
+
+# Ignore Python compiled wheel files
+*.whl
+
+# Ignore bot token backups or temporary credentials
+**/config/*.yaml
+**/config/*.yml
+**/config/*.json
+
+# Test results / coverage reports
+tests/__pycache__/
+tests/*.log
+
+# Emacs / Vim / Sublime
+*~
+*.sublime-project
+*.sublime-workspace

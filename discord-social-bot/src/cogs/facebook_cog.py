@@ -1,109 +1,90 @@
 import discord
 from discord.ext import commands
+from ..services.facebook import FacebookAPI
 import logging
-import requests
-import time
-from typing import Optional, Dict, Any
-from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
-
-class FacebookAPI:
-    BASE_URL = "https://graph.facebook.com/v18.0/"
-
-    def __init__(self, access_token: str, max_retries: int = 1):
-        self.access_token = access_token
-        self.max_retries = max_retries
-
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
-        url = urljoin(self.BASE_URL, endpoint)
-        if 'params' in kwargs:
-            kwargs['params']['access_token'] = self.access_token
-        else:
-            kwargs['params'] = {'access_token': self.access_token}
-
-        for attempt in range(self.max_retries + 1):
-            try:
-                response = requests.request(method, url, **kwargs)
-                response.raise_for_status()
-                return {"success": True, "data": response.json()}
-            except requests.exceptions.RequestException as e:
-                logger.error(f"[Attempt {attempt+1}] Facebook API error: {e}")
-                if attempt < self.max_retries:
-                    logger.info("Retrying...")
-                    time.sleep(1)
-                else:
-                    content = response.content if 'response' in locals() else None
-                    return {"success": False, "error": str(e), "response": content}
-
-    # --- Posts ---
-    def post_text(self, message: str, page_id: Optional[str] = None) -> Dict[str, Any]:
-        endpoint = f"{page_id}/feed" if page_id else "me/feed"
-        return self._make_request("POST", endpoint, data={"message": message})
-
-    def post_image(self, image_url: str, caption: str = "", page_id: Optional[str] = None) -> Dict[str, Any]:
-        endpoint = f"{page_id}/photos" if page_id else "me/photos"
-        return self._make_request("POST", endpoint, data={"url": image_url, "caption": caption})
-
-    def get_posts(self, limit: int = 10, page_id: Optional[str] = None) -> Dict[str, Any]:
-        endpoint = f"{page_id}/posts" if page_id else "me/posts"
-        params = {"limit": limit, "fields": "id,message,created_time,attachments"}
-        return self._make_request("GET", endpoint, params=params)
-
-    def delete_post(self, post_id: str) -> Dict[str, Any]:
-        return self._make_request("DELETE", post_id)
-
-    def get_page_info(self, page_id: Optional[str] = None) -> Dict[str, Any]:
-        endpoint = page_id if page_id else "me"
-        params = {"fields": "id,name,followers_count,fan_count"}
-        return self._make_request("GET", endpoint, params=params)
-
-
-# -----------------------------
-# ✅ Discord Cog Wrapper
-# -----------------------------
 class FacebookCog(commands.Cog):
     """Discord commands for Facebook operations."""
 
     def __init__(self, bot):
         self.bot = bot
-        self.fb = None  # will hold a FacebookAPI instance
+        self.fb = None  # FacebookAPI instance
 
     @commands.command(name="fbinit")
     async def fb_init(self, ctx, token: str):
-        """Initialize Facebook access token."""
+        """Initialize Facebook API with a token."""
         self.fb = FacebookAPI(access_token=token)
-        await ctx.send("✅ Facebook API initialized with provided token.")
+        await ctx.send("✅ Facebook API initialized with your access token.")
 
     @commands.command(name="fbpost")
     async def fb_post(self, ctx, *, message: str):
-        """Post a message to Facebook."""
+        """Post text to Facebook."""
         if not self.fb:
-            await ctx.send("❌ You must initialize the Facebook API first using `/fbinit <token>`.")
-            return
-
+            return await ctx.send("❌ Use `/fbinit <token>` first.")
         result = self.fb.post_text(message)
-        if result["success"]:
-            await ctx.send("✅ Message posted successfully!")
-        else:
-            await ctx.send(f"⚠️ Failed to post: {result['error']}")
+        await ctx.send("✅ Posted!" if result["success"] else f"⚠️ Failed: {result['error']}")
 
-    @commands.command(name="fbinfo")
-    async def fb_info(self, ctx):
-        """Get page info."""
+    @commands.command(name="fbposts")
+    async def fb_get_posts(self, ctx, limit: int = 5):
+        """Fetch recent Facebook posts."""
         if not self.fb:
-            await ctx.send("❌ Initialize the Facebook API first.")
-            return
+            return await ctx.send("❌ Initialize the Facebook API first.")
+        result = self.fb.get_posts(limit)
+        if not result["success"]:
+            return await ctx.send(f"⚠️ Error: {result['error']}")
+        posts = result["data"].get("data", [])
+        if not posts:
+            return await ctx.send("📭 No recent posts found.")
+        msg = "\n\n".join([f"🆔 `{p['id']}`\n📝 {p.get('message', '(no message)')}" for p in posts])
+        await ctx.send(f"📘 **Recent Posts:**\n{msg}")
 
-        result = self.fb.get_page_info()
+    @commands.command(name="fbstats")
+    async def fb_get_stats(self, ctx, post_id: str):
+        """Get stats for a specific Facebook post."""
+        if not self.fb:
+            return await ctx.send("❌ Initialize first.")
+        result = self.fb.get_post_stats(post_id)
         if result["success"]:
-            data = result["data"]
-            await ctx.send(f"📘 Page Info:\n**Name:** {data.get('name')}\n**Followers:** {data.get('followers_count', 'N/A')}")
+            d = result["data"]
+            likes = d.get("likes", {}).get("summary", {}).get("total_count", 0)
+            comments = d.get("comments", {}).get("summary", {}).get("total_count", 0)
+            shares = d.get("shares", {}).get("count", 0)
+            await ctx.send(f"📊 **Post Stats:**\n❤️ Likes: {likes}\n💬 Comments: {comments}\n🔁 Shares: {shares}")
         else:
-            await ctx.send(f"⚠️ Failed to fetch page info: {result['error']}")
+            await ctx.send(f"⚠️ Failed to fetch stats: {result['error']}")
 
+    @commands.command(name="fbreply")
+    async def fb_auto_reply(self, ctx, post_id: str, keyword: str, *, reply_text: str):
+        """Auto-reply to comments containing a keyword."""
+        if not self.fb:
+            return await ctx.send("❌ Initialize first.")
+        result = self.fb.get_comments(post_id)
+        if not result["success"]:
+            return await ctx.send(f"⚠️ Failed to fetch comments: {result['error']}")
+        matched = 0
+        for c in result["data"].get("data", []):
+            if keyword.lower() in c.get("message", "").lower():
+                self.fb.reply_to_comment(c["id"], reply_text)
+                matched += 1
+        await ctx.send(f"✅ Auto-replied to {matched} comment(s) containing '{keyword}'.")
+
+    @commands.command(name="fbmoderate")
+    async def fb_moderate(self, ctx, comment_id: str, action: str):
+        """Moderate a comment (hide/delete)."""
+        if not self.fb:
+            return await ctx.send("❌ Initialize first.")
+        if action.lower() == "hide":
+            result = self.fb.hide_comment(comment_id)
+        elif action.lower() == "delete":
+            result = self.fb.delete_comment(comment_id)
+        else:
+            return await ctx.send("⚠️ Invalid action. Use 'hide' or 'delete'.")
+        if result["success"]:
+            await ctx.send(f"✅ Comment {action}d successfully.")
+        else:
+            await ctx.send(f"⚠️ Failed to {action} comment: {result['error']}")
 
 async def setup(bot):
     await bot.add_cog(FacebookCog(bot))
