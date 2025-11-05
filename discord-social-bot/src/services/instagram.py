@@ -1,78 +1,144 @@
-import requests
-import logging
-from typing import Optional, Dict, Any
-from urllib.parse import urljoin
-import time
+import aiohttp
+import asyncio
+from utils.instagram.oauth import instagram_oauth_handler
 
-logger = logging.getLogger("instagram_service")
-logging.basicConfig(level=logging.INFO)
 
-class InstagramBusinessAPI:
-    BASE_URL = "https://graph.facebook.com/v24.0/"
+GRAPH_BASE = "https://graph.facebook.com/v24.0"
 
-    def __init__(self, access_token: str, ig_user_id: Optional[str] = None, max_retries: int = 1):
-        self.access_token = access_token
-        self.ig_user_id = ig_user_id
-        self.max_retries = max_retries
 
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
-        url = urljoin(self.BASE_URL, endpoint)
-        if 'params' in kwargs:
-            kwargs['params']['access_token'] = self.access_token
+class InstagramAPI:
+    def __init__(self):
+        pass
+
+    # -------------------- HELPERS --------------------
+    async def _request(self, method: str, url: str, access_token: str, params=None, json=None):
+        """Wrapper pour envoyer les requêtes Graph API Instagram"""
+        if params is None:
+            params = {}
+        params["access_token"] = access_token
+
+        async with aiohttp.ClientSession() as session:
+            async with session.request(method, url, params=params, json=json) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    print(f"[ERROR] Instagram API {method} {url}: {resp.status} — {text}")
+                    return None
+                try:
+                    return await resp.json()
+                except Exception as e:
+                    print(f"[ERROR] JSON parsing: {e}")
+                    return None
+
+    # -------------------- CREATE MEDIA --------------------
+    async def post_media(self, ig_user_id: str, caption: str, media_urls: list[str] = None, access_token: str = None):
+        """
+        Crée et publie un post sur Instagram Business
+        (photo unique ou carrousel)
+        """
+        if not access_token:
+            access_token = await instagram_oauth_handler.get_valid_token(ig_user_id)
+        if not access_token:
+            print("[ERROR] No valid access token.")
+            return None
+
+        # --- Cas 1 : une seule image ---
+        if media_urls and len(media_urls) == 1:
+            media_url = f"{GRAPH_BASE}/{ig_user_id}/media"
+            payload = {"caption": caption, "image_url": media_urls[0]}
+            create_res = await self._request("POST", media_url, access_token, json=payload)
+            if not create_res or "id" not in create_res:
+                return None
+
+            creation_id = create_res["id"]
+
+        # --- Cas 2 : plusieurs images (carrousel) ---
+        elif media_urls and len(media_urls) > 1:
+            child_ids = []
+            for url in media_urls:
+                child_res = await self._request(
+                    "POST",
+                    f"{GRAPH_BASE}/{ig_user_id}/media",
+                    access_token,
+                    json={"image_url": url, "is_carousel_item": True}
+                )
+                if child_res and "id" in child_res:
+                    child_ids.append(child_res["id"])
+                await asyncio.sleep(0.5)
+
+            # Crée le post carrousel
+            create_res = await self._request(
+                "POST",
+                f"{GRAPH_BASE}/{ig_user_id}/media",
+                access_token,
+                json={"caption": caption, "children": child_ids, "media_type": "CAROUSEL"}
+            )
+            if not create_res or "id" not in create_res:
+                return None
+
+            creation_id = create_res["id"]
+
         else:
-            kwargs['params'] = {'access_token': self.access_token}
+            print("[ERROR] No media provided for post.")
+            return None
 
-        for attempt in range(self.max_retries + 1):
-            try:
-                response = requests.request(method, url, **kwargs)
-                response.raise_for_status()
-                return {"success": True, "data": response.json()}
-            except requests.exceptions.RequestException as e:
-                logger.error(f"[Attempt {attempt+1}] Instagram API error: {e}")
-                if attempt < self.max_retries:
-                    time.sleep(1)
-                else:
-                    content = response.content if 'response' in locals() else None
-                    return {"success": False, "error": str(e), "response": content}
+        # --- Étape 2 : publier ---
+        publish_res = await self._request(
+            "POST",
+            f"{GRAPH_BASE}/{ig_user_id}/media_publish",
+            access_token,
+            json={"creation_id": creation_id}
+        )
 
-    # --- POSTING ---
-    def post_image(self, image_url: str, caption: str) -> Dict[str, Any]:
-        if not self.ig_user_id:
-            return {"success": False, "error": "Missing Instagram user ID."}
+        if publish_res and "id" in publish_res:
+            return publish_res["id"]
+        return None
 
-        create_endpoint = f"{self.ig_user_id}/media"
-        create_data = {"image_url": image_url, "caption": caption}
-        container = self._make_request("POST", create_endpoint, data=create_data)
+    # -------------------- GET RECENT POSTS --------------------
+    async def get_recent_posts(self, ig_user_id: str, limit: int = 5, access_token: str = None):
+        """Récupère les derniers posts du compte Instagram."""
+        if not access_token:
+            access_token = await instagram_oauth_handler.get_valid_token(ig_user_id)
+        if not access_token:
+            return None
 
-        if not container.get("success"):
-            return container
+        url = f"{GRAPH_BASE}/{ig_user_id}/media"
+        params = {"fields": "id,caption,media_type,media_url,timestamp", "limit": limit}
+        res = await self._request("GET", url, access_token, params=params)
+        return res.get("data", []) if res else None
 
-        publish_endpoint = f"{self.ig_user_id}/media_publish"
-        publish_data = {"creation_id": container["data"]["id"]}
-        return self._make_request("POST", publish_endpoint, data=publish_data)
+    # -------------------- DELETE POST --------------------
+    async def delete_post(self, post_id: str, ig_user_id: str, access_token: str = None):
+        """Supprime un post Instagram."""
+        if not access_token:
+            access_token = await instagram_oauth_handler.get_valid_token(ig_user_id)
+        if not access_token:
+            return False
 
-    def post_text(self, caption: str) -> Dict[str, Any]:
-        placeholder = "https://via.placeholder.com/1080x1080.png?text=" + requests.utils.quote(caption)
-        return self.post_image(placeholder, caption)
+        url = f"{GRAPH_BASE}/{post_id}"
+        res = await self._request("DELETE", url, access_token)
+        return res is not None
 
-    # --- GET POSTS ---
-    def get_recent_posts(self, limit: int = 5) -> Dict[str, Any]:
-        if not self.ig_user_id:
-            return {"success": False, "error": "Missing Instagram user ID."}
+    # -------------------- GET POST INSIGHTS --------------------
+    async def get_post_insights(self, post_id: str, ig_user_id: str, access_token: str = None):
+        """Récupère les statistiques d’un post Instagram."""
+        if not access_token:
+            access_token = await instagram_oauth_handler.get_valid_token(ig_user_id)
+        if not access_token:
+            return {}
 
-        endpoint = f"{self.ig_user_id}/media"
-        params = {"fields": "id,caption,media_url,permalink,timestamp", "limit": limit}
-        return self._make_request("GET", endpoint, params=params)
+        url = f"{GRAPH_BASE}/{post_id}/insights"
+        params = {
+            "metric": "engagement,impressions,reach,saved,likes,comments"
+        }
+        res = await self._request("GET", url, access_token, params=params)
+        if not res or "data" not in res:
+            return {}
 
-    # --- ANALYTICS ---
-    def get_insights(self, media_id: str) -> Dict[str, Any]:
-        endpoint = f"{media_id}/insights"
-        params = {"metric": "impressions,reach,engagement"}
-        return self._make_request("GET", endpoint, params=params)
+        # Format simple
+        insights = {}
+        for item in res["data"]:
+            insights[item["name"]] = item.get("values", [{}])[0].get("value", 0)
+        return insights
 
-    def get_account_stats(self) -> Dict[str, Any]:
-        if not self.ig_user_id:
-            return {"success": False, "error": "Missing Instagram user ID."}
-        endpoint = f"{self.ig_user_id}"
-        params = {"fields": "username,followers_count,follows_count,media_count"}
-        return self._make_request("GET", endpoint, params=params)
+
+instagram_api = InstagramAPI()
