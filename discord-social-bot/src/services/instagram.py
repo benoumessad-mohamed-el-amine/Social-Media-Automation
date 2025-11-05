@@ -1,6 +1,6 @@
 import aiohttp
 import asyncio
-from utils.instagram.oauth import instagram_oauth_handler
+from utils.oauth import instagram_oauth_handler
 
 
 GRAPH_BASE = "https://graph.facebook.com/v24.0"
