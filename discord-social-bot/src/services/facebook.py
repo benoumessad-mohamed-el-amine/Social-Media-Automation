@@ -1,26 +1,26 @@
 import requests
 import logging
+import time
 from typing import Optional, Dict, Any
 from urllib.parse import urljoin
-import time
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 class FacebookAPI:
     BASE_URL = "https://graph.facebook.com/v18.0/"
-    
+
     def __init__(self, access_token: str, max_retries: int = 1):
         self.access_token = access_token
         self.max_retries = max_retries
-        
+
     def _make_request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
         url = urljoin(self.BASE_URL, endpoint)
-        if 'params' in kwargs:
-            kwargs['params']['access_token'] = self.access_token
+        if "params" in kwargs:
+            kwargs["params"]["access_token"] = self.access_token
         else:
-            kwargs['params'] = {'access_token': self.access_token}
-        
+            kwargs["params"] = {"access_token": self.access_token}
+
         for attempt in range(self.max_retries + 1):
             try:
                 response = requests.request(method, url, **kwargs)
@@ -29,7 +29,6 @@ class FacebookAPI:
             except requests.exceptions.RequestException as e:
                 logger.error(f"[Attempt {attempt+1}] Facebook API error: {e}")
                 if attempt < self.max_retries:
-                    logger.info("Retrying...")
                     time.sleep(1)
                 else:
                     content = response.content if 'response' in locals() else None
@@ -50,30 +49,33 @@ class FacebookAPI:
         params = {"limit": limit, "fields": "id,message,created_time,attachments"}
         return self._make_request("GET", endpoint, params=params)
 
-    # --- Delete Post ---
-    def delete_post(self, post_id: str) -> Dict[str, Any]:
-        endpoint = post_id
-        return self._make_request("DELETE", endpoint)
+    # --- Post Stats ---
+    def get_post_stats(self, post_id: str) -> Dict[str, Any]:
+        params = {
+            "fields": "id,likes.summary(true),comments.summary(true),shares"
+        }
+        return self._make_request("GET", post_id, params=params)
+
+    # --- Comments ---
+    def get_comments(self, post_id: str, limit: int = 10) -> Dict[str, Any]:
+        endpoint = f"{post_id}/comments"
+        params = {"limit": limit, "fields": "id,from,message,created_time"}
+        return self._make_request("GET", endpoint, params=params)
+
+    def reply_to_comment(self, comment_id: str, message: str) -> Dict[str, Any]:
+        endpoint = f"{comment_id}/comments"
+        return self._make_request("POST", endpoint, data={"message": message})
+
+    # --- Comment Moderation ---
+    def hide_comment(self, comment_id: str) -> Dict[str, Any]:
+        endpoint = comment_id
+        return self._make_request("POST", endpoint, data={"is_hidden": "true"})
+
+    def delete_comment(self, comment_id: str) -> Dict[str, Any]:
+        return self._make_request("DELETE", comment_id)
 
     # --- Page Info ---
     def get_page_info(self, page_id: Optional[str] = None) -> Dict[str, Any]:
         endpoint = page_id if page_id else "me"
         params = {"fields": "id,name,followers_count,fan_count"}
         return self._make_request("GET", endpoint, params=params)
-
-# Usage example:
-"""
-fb = FacebookAPI(access_token="your_access_token")
-
-# Post text
-result = fb.post_text("Hello from my Discord bot!")
-
-# Post image
-result = fb.post_image("https://example.com/image.jpg", "Check out this image!")
-
-# Get recent posts
-posts = fb.get_posts(limit=5)
-
-# Get insights
-insights = fb.get_post_insights("post_id")
-"""
