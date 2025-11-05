@@ -2,7 +2,7 @@ import aiohttp
 import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from src.mongodb_handler import db_handler
+from utils.database.mongodb_handler import db_handler
 from cryptography.fernet import Fernet
 
 load_dotenv()
