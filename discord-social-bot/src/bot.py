@@ -5,13 +5,14 @@ import asyncio
 import discord
 from discord.ext import commands
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from comands_handler import register_commands
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from commands_handler import register_commands  # ✅ fix: correct file name
 
 # Add parent dir to sys.path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Import your internal modules
+# Import internal modules
 from services.schedular_service import scheduler_service
 from utils.database.mongodb_handler import db_handler
 
@@ -37,20 +38,16 @@ async def on_ready():
     logger.info(f"🤖 Logged in as: {bot.user} (ID: {bot.user.id})")
     logger.info(f"🌍 Connected to {len(bot.guilds)} guild(s)")
 
-    # Register custom slash commands
+    # ✅ Register all slash commands (from commands_handler)
     register_commands(bot)
 
-
-    # Attach scheduler to current asyncio loop
-    loop = asyncio.get_running_loop()
-    scheduler_service.scheduler.configure(event_loop=loop)
-
-    # Attach scheduler and start it
+    # ✅ Start scheduler (only once)
     loop = asyncio.get_running_loop()
     scheduler_service.scheduler.configure(event_loop=loop)
     scheduler_service.start(db_handler_instance=db_handler)
+    logger.info("✅ Scheduler started successfully.")
 
-    # Sync slash commands
+    # ✅ Sync all slash commands with Discord
     try:
         synced = await bot.tree.sync()
         logger.info(f"✅ Synced {len(synced)} command(s) with Discord.")
@@ -58,7 +55,7 @@ async def on_ready():
         logger.error(f"❌ Error syncing commands: {sync_error}")
 
 # ─────────────────────────────────────────────
-# Command examples
+# Simple slash commands
 # ─────────────────────────────────────────────
 @bot.tree.command(name="hello", description="Say hello to the bot")
 async def hello(interaction: discord.Interaction):
@@ -84,7 +81,7 @@ async def main():
     # Start bot
     token = os.getenv("DISCORD_TOKEN")
     if not token:
-        logger.error("❌ DISCORD_BOT_TOKEN not found in environment variables.")
+        logger.error("❌ DISCORD_TOKEN not found in environment variables.")
         return
 
     await bot.start(token)
