@@ -5,8 +5,8 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.database.model import PlatformType
-from utils.instagram.oauth import instagram_oauth_handler
-from utils.instagram.instagram_api import instagram_api
+from utils.oauth import instagram_oauth_handler
+from services.instagram import instagram_api
 from datetime import datetime
 
 
