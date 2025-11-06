@@ -5,7 +5,7 @@ from discord import app_commands
 import sys
 import os
 
-
+#test
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import de ton handler MongoDB
