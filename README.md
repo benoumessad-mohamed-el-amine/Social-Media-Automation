@@ -1,7 +1,9 @@
 ...existing code...
 # Discord Social Media Manager
 
-Lightweight Discord bot + FastAPI service to manage Facebook, Instagram, LinkedIn and TikTok accounts (OAuth, posting, scheduling, basic analytics). Uses MongoDB for storage.
+The Discord Social Media Automation Bot is a centralized management tool that allows teams and individuals to control multiple social media accounts (Facebook, Instagram) directly from a Discord server.
+It transforms Discord into a command center for social media operations, enabling real-time posting, cross-posting, moderation, and account oversight — all without leaving the chat.
+
 
 ---
 
@@ -24,17 +26,7 @@ Lightweight Discord bot + FastAPI service to manage Facebook, Instagram, LinkedI
    # fill values: DISCORD_TOKEN, MONGODB_URL, platform client ids/secrets
    ```
 
-4. Start MongoDB (local) or ensure remote DB is available
-   ```bash
-   sudo systemctl start mongod
-   ```
-
-5. Run FastAPI (handles OAuth callbacks)
-   ```bash
-   uvicorn src.api.main:app --reload --port 8080
-   ```
-
-6. Run Discord bot
+4. Run Discord bot
    ```bash
    python src/bot.py
    ```
@@ -44,22 +36,16 @@ Lightweight Discord bot + FastAPI service to manage Facebook, Instagram, LinkedI
 ## Project layout
 
 - src/
-  - api/                    FastAPI server for OAuth callbacks and light APIs
-    - routes/                platform-specific OAuth routes (facebook, instagram, linkedin, tiktok)
-    - main.py                FastAPI app entry
-    - models/                Pydantic schemas for requests/responses
-  - bot/                    Discord bot entry and cogs
     - cogs/                 Commands per platform (facebook, instagram, linkedin, tiktok, helpers)
-    - main.py               Bot startup wrapper (loads cogs, scheduler)
-  - core/                   shared configuration and logging
-    - config.py
-    - logger.py
-  - db/                     MongoDB models & repositories (motor)
+
+  - services/               Platform API clients (Graph API,facebookservices ,scheduler services)
+  - utils/                  Encryption, scheduler (APScheduler)
+       - db/                MongoDB models & repositories (motor)
     - models.py
-    - repositories/
-  - services/               Platform API clients (Graph API, LinkedIn, TikTok)
-  - utils/                  Encryption, scheduler (APScheduler), validators, helpers
+    - mongodb_handler.py
+    - encryption.py          
 - tests/                    Unit and integration tests
+- bot.py                  Discord bot entry 
 - .env
 - requirements.txt
 - docker-compose.yml
@@ -72,10 +58,11 @@ Lightweight Discord bot + FastAPI service to manage Facebook, Instagram, LinkedI
 - DISCORD_TOKEN - Discord bot token
 - MONGODB_URL - MongoDB connection URI (eg. mongodb://localhost:27017)
 - DB_NAME - Database name (default: discord_social)
+- ENCRYPTION_KEY="you can generate your key using key generator function  (exemple : JAWGd_tuF-vm8yXv3BdHSSkzgXKLHWvm_MRSzOfQgbk=)
+- ENCRYPTION_SALT=(exemple: kxNcx2szYIICKHQG-lI1QbvwKWxeWNt2r_lgIXvXpRo=)
+- ENCRYPTION_METHOD=aes-gcm (encryption method)
 - FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET
 - INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET
-- LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET
-- TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET
 - API_HOST / API_PORT (FastAPI)
 
 ---
@@ -109,43 +96,12 @@ Lightweight Discord bot + FastAPI service to manage Facebook, Instagram, LinkedI
   - /post <platform> <content>
   - /schedule <platform> <ISO-datetime> <content>
   - /crosspost <content>
-
-- Monitoring
-  - /recent <platform>
-  - /stats <platform>
-  - /post-insights <post_id>
+  - /reply [platform] [post_id] [comment]
+  - /delete [platform] [post_id]
+  - /help
 
 ---
 
-## Development & testing
-
-- Run unit tests:
-  ```bash
-  pytest
-  ```
-
-- Run dev servers
-  - FastAPI: `uvicorn src.api.main:app --reload --port 8080`
-  - Bot: `python src/bot.py`
-
-- Use ngrok when testing OAuth callbacks locally:
-  ```bash
-  ngrok http 8080
-  ```
-
-- Branching: feature/<platform>-<task>, open PR to `main`, include tests
-
----
-
-## Team tasks (short)
-
-- Person 1 — infra + Facebook OAuth & posting
-- Person 2 — Instagram integration + analytics
-- Person 3 — LinkedIn + scheduler
-- Person 4 — TikTok + bulk ops & tests
-- Person 5 — Discord UX, commands, embeds and polish
-
----
 
 ## Notes
 
