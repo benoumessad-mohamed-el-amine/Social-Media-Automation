@@ -1,110 +1,150 @@
-...existing code...
-# Discord Social Media Manager
+# Discord Social Media Bot
 
-The Discord Social Media Automation Bot is a centralized management tool that allows teams and individuals to control multiple social media accounts (Facebook, Instagram) directly from a Discord server.
-It transforms Discord into a command center for social media operations, enabling real-time posting, cross-posting, moderation, and account oversight — all without leaving the chat.
+A Discord bot that enables managing multiple social media accounts (Facebook, Instagram, LinkedIn, TikTok) through Discord commands. Built with Python, Discord.py, and MongoDB.
 
+## Features
 
----
+- 🔑 OAuth2 authentication for social media platforms
+- 📝 Post content to multiple platforms
+- ⏰ Schedule posts for later publication
+- 📊 View basic analytics and insights
+- 🔄 Cross-post to multiple platforms
+- 🗑️ Delete posts across platforms
+- 💬 Reply to comments/interactions
+- 📈 Track engagement metrics
 
-## Quick start
+## Technology Stack
 
-1. Create and activate virtualenv
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
+- **Python 3.12+**
+- **Discord.py** - Bot framework
+- **MongoDB** - Data storage
+- **Motor** - Async MongoDB driver
+- **APScheduler** - Post scheduling
+- **Pydantic** - Data validation
+- **aiohttp** - Async HTTP client
+- **cryptography** - Token encryption
 
-2. Install dependencies
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Installation
 
-3. Copy env example and edit
-   ```bash
-   cp .env.example .env
-   # fill values: DISCORD_TOKEN, MONGODB_URL, platform client ids/secrets
-   ```
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd discord-social-bot
+```
 
-4. Run Discord bot
-   ```bash
-   python src/bot.py
-   ```
+2. Create and activate virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or
+.\venv\Scripts\activate  # Windows
+```
 
----
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-## Project layout
+4. Configure environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
 
-- src/
-    - cogs/                 Commands per platform (facebook, instagram, linkedin, tiktok, helpers)
+## Configuration
 
-  - services/               Platform API clients (Graph API,facebookservices ,scheduler services)
-  - utils/                  Encryption, scheduler (APScheduler)
-       - db/                MongoDB models & repositories (motor)
-    - models.py
-    - mongodb_handler.py
-    - encryption.py          
-- tests/                    Unit and integration tests
-- bot.py                  Discord bot entry 
-- .env
-- requirements.txt
-- docker-compose.yml
-- README.md
+Create a `.env` file with the following variables:
 
----
+```env
+# Discord
+DISCORD_TOKEN=your_discord_bot_token
 
-## Environment variables (required in .env)
+# MongoDB
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DATABASE=social_bot
 
-- DISCORD_TOKEN - Discord bot token
-- MONGODB_URL - MongoDB connection URI (eg. mongodb://localhost:27017)
-- DB_NAME - Database name (default: discord_social)
-- ENCRYPTION_KEY="you can generate your key using key generator function  (exemple : JAWGd_tuF-vm8yXv3BdHSSkzgXKLHWvm_MRSzOfQgbk=)
-- ENCRYPTION_SALT=(exemple: kxNcx2szYIICKHQG-lI1QbvwKWxeWNt2r_lgIXvXpRo=)
-- ENCRYPTION_METHOD=aes-gcm (encryption method)
-- FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET
-- INSTAGRAM_CLIENT_ID / INSTAGRAM_CLIENT_SECRET
-- API_HOST / API_PORT (FastAPI)
+# Encryption
+ENCRYPTION_KEY=your_encryption_key
 
----
+# Facebook/Instagram
+FACEBOOK_APP_ID=your_fb_app_id
+FACEBOOK_APP_SECRET=your_fb_app_secret
+INSTAGRAM_REDIRECT_URI=http://localhost:8000/oauth/callback
 
-## Important workflows
+# Other platforms...
+LINKEDIN_CLIENT_ID=your_linkedin_client_id
+TIKTOK_CLIENT_KEY=your_tiktok_client_key
+```
 
-- OAuth flow:
-  - User runs `/connect <platform>` in Discord
-  - Bot sends OAuth URL (FastAPI handles callback)
-  - FastAPI exchanges code → tokens, stores encrypted tokens in MongoDB under platform_accounts
+## Usage
 
-- Scheduling:
-  - Posts saved in `scheduled_posts` collection
-  - APScheduler (bot or separate worker) checks DB periodically and publishes due posts
-  - Status updates and retries recorded in DB
+1. Start MongoDB:
+```bash
+mongod
+```
 
-- Token safety:
-  - Tokens encrypted (cryptography/Fernet) before writing to DB
-  - Refresh tokens used to renew expired access tokens
+2. Run the OAuth server:
+```bash
+python -m src.utils.oauth_server
+```
 
----
+3. Start the bot:
+```bash
+python -m src.bot
+```
 
-## Commands (examples)
+## Discord Commands
 
-- Account management
-  - /connect <platform>
-  - /disconnect <platform>
-  - /accounts
+### Account Management
+- `/connect <platform>` - Connect social media account
+- `/disconnect <platform>` - Disconnect account
+- `/accounts` - List connected accounts
 
-- Publishing
-  - /post <platform> <content>
-  - /schedule <platform> <ISO-datetime> <content>
-  - /crosspost <content>
-  - /reply [platform] [post_id] [comment]
-  - /delete [platform] [post_id]
-  - /help
+### Posting
+- `/post <platform> <content>` - Post to platform
+- `/crosspost <content>` - Post to all platforms
+- `/schedule <platform> <datetime> <content>` - Schedule post
 
----
+### Moderation
+- `/reply <platform> <post_id> <comment>` - Reply to post
+- `/delete <platform> <post_id>` - Delete post
 
+### Analytics
+- `/stats <platform>` - View platform stats
+- `/recent <platform>` - Show recent posts
 
-## Notes
+## Development
 
-- Keep secrets out of Git. Use `.env` and CI secrets.
-- Measure API usage and add rate-limit handling per platform.
-- Start with Facebook posting + OAuth and a working scheduler — then add analytics.
+### Project Structure
+```
+discord-social-bot/
+├── src/
+│   ├── bot.py            # Bot entry point
+│   ├── cogs/            # Command groups
+│   ├── services/        # Platform APIs
+│   └── utils/           # Helpers & utilities
+├── tests/               # Test files
+└── docker-compose.yml   # Docker configuration
+```
+
+### Running Tests
+```bash
+python -m pytest tests/
+```
+
+### Docker Deployment
+```bash
+docker-compose up -d
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
